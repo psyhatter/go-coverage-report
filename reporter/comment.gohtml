@@ -1,0 +1,36 @@
+#### :bar_chart: Code Coverage Report
+{{- if not (or .HideTotal .HidePatch) }}
+| Metric | Value | Visualization |
+|-|-|-|
+{{-   if not .HideTotal }}
+| **Total Coverage** | {{ printf "%.1f%%" .Total }}{{ totalDiff }} | {{ progressBar .Total }} |
+{{-   end }}
+{{-   if not .HidePatch }}
+| **Coverage for PR Changes** | {{ printf "%.1f%%" .Patch }} | {{ progressBar .Patch }} |
+{{-   end }}
+#### Notes:
+{{-   if not .HideTotal }}
+- **Total Coverage** - coverage indicator within the entire code.
+{{-   end }}
+{{-   if not .HidePatch }}
+- **Coverage for PR Changes** - coverage of changes made within this PR only.
+{{-   end }}
+{{- end }}
+{{- if and .Changes (not .HideHowToImprove) }}
+<details>
+<summary><b>Let's improve the coverage of tests!</b> Click here to find out how</summary>
+  <p>
+  {{- $module := .Module }}
+  {{- $changes := .Changes }}
+  {{- range $i, $filename := sortedFilenames -}}
+    <details><summary>{{ $filename.Value }}</summary>
+    {{- $blocks := index $changes $filename }}
+    {{- range $block := $blocks }}
+
+{{ link $filename $block }}
+    {{- end }}
+    </details>
+  {{- end }}
+  </p>
+</details>
+{{- end }}

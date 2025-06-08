@@ -1,0 +1,144 @@
+name: 'Go Coverage Report'
+description: 'Display Go Code Coverage'
+inputs:
+  coverage_file:
+    description: |
+      Go coverage file for the code.
+      Example of generation:
+        go test -coverprofile=coverage.out -coverpkg=./... ./...
+    default: "coverage.out"
+    required: true
+  prev_coverage_file:
+    description: |
+      Go coverage file for the code before changes.
+      When not provided, previous coverage information will be taken
+      from prev_coverage.
+    default: 'prev-coverage.out'
+    required: false
+  prev_coverage:
+    description: |
+      Allows specifying the previous coverage percentage.
+    default: '0.0'
+    required: false
+  skip_generated:
+    description: |
+      Skips generated files (e.g. proto, swagger, graphql, mock files).
+    default: 'true'
+    required: false
+  skip_package_main:
+    description: |
+      Skips package main files.
+    default: 'true'
+    required: false
+  github_token:
+    description: |
+      The GitHub access token (e.g. `secrets.GITHUB_TOKEN`) is used to create
+      or update comments. By default, it is set to `{{ github.token }}`.
+      If not provided, comment posting is skipped.
+    default: ${{ github.token }}
+    required: false
+  hide_total:
+    description: |
+      Hides the "Total Coverage" section in the comment.
+    default: 'false'
+    required: false
+  hide_patch:
+    description: |
+      Hides the "Patch Coverage" section in the comment.
+    default: 'false'
+    required: false
+  hide_how_to_improve:
+    description: |
+      Hides the "How to Improve Coverage" section in the comment.
+    default: 'false'
+    required: false
+  changes_limit:
+    description: |
+      Limits the number of changes in the how to improve coverage section
+      of the comment.
+    default: '100'
+    required: false
+  template_path:
+    description: |
+      Allows to specify your custom template for the comment using this option.
+    default: ''
+    required: false
+  use_git_notes:
+    description: |
+      If enabled, uses git-notes to store cover_file.
+    default: 'false'
+    required: false
+  version:
+    description: |
+      A version of the reporter utility.
+    required: false
+    default: 'v0.0.1'
+  cover_ignore_filepath:
+    description: |
+      Allows to specify a path to a file with patterns to ignore in coverage report.
+    required: false
+    default: '.coverignore'
+outputs:
+  total:
+    description: |
+      The current total percent of test coverage.
+    value: '0.0'
+  patch:
+    description: |
+      The coverage percentage of lines modified by the PR.
+    value: '0.0'
+  prev_total:
+    description: |
+      The previous total percent of test coverage.
+    value: '0.0'
+  diff:
+    description: |
+      The difference between total and prev_total.
+    value: '0.0'
+runs:
+  using: "composite"
+  steps:
+    - if: github.event_name == 'pull_request'
+      name: Git fetch
+      shell: bash
+      run: |
+        git fetch --no-tags --prune --progress --no-recurse-submodules origin ${{ github.base_ref }} \
+        +refs/notes/coverage:refs/notes/coverage || true
+
+    - if: github.event_name == 'pull_request' && inputs.use_git_notes
+      name: Git fetch
+      shell: bash
+      run: |
+        git notes --ref coverage show origin/${{ github.base_ref }}} > ${{ inputs.prev_coverage_file }} \
+        || rm ${{ inputs.prev_coverage_file }}
+
+    - if: github.event_name == 'pull_request'
+      name: Execute reporter
+      shell: bash
+      run: |
+        git fetch --no-tags --prune --progress --no-recurse-submodules origin ${GITHUB_BASE_REF}
+        go run github.com/psyhatter/go-coverage-report/cmd/reporter@${{ inputs.version }} \
+          -branch=${{ github.base_ref }} \
+          -changes-limit=${{ inputs.changes_limit }} \
+          -comment-template-file=${{ inputs.template_path }} \
+          -coverage-file=${{ inputs.coverage_file }} \
+          -github-token=${{ inputs.github_token }} \
+          -hide-how-to-improve=${{ inputs.hide_how_to_improve }} \
+          -hide-patch=${{ inputs.hide_patch }} \
+          -hide-total=${{ inputs.hide_total }} \
+          -pr-number=${{ github.event.number }} \
+          -prev-coverage-file=${{ inputs.prev_coverage_file }} \
+          -prev-coverage=${{ inputs.prev_coverage }} \
+          -repo-url=${{ github.server_url }}/${{ github.repository }} \
+          -skip-generated=${{ inputs.skip_generated }} \
+          -skip-package-main=${{ inputs.skip_package_main }} \
+          -cover-ignore-filepath=${{ inputs.cover_ignore_filepath }} \
+
+    - if: github.event_name == 'push' && inputs.use_git_notes
+      name: Save coverage file
+      shell: bash
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git notes --ref coverage add -f -F ${{ inputs.root }}/${{ inputs.coverage_file }} origin/${GITHUB_REF_NAME}
+        git push origin refs/notes/coverage
